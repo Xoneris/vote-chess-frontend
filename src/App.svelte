@@ -1,39 +1,81 @@
 <script lang="ts">
-
   import { Chess } from 'chess.js';
+  import { onDestroy, onMount } from 'svelte';
+  import type { Square, Color, PieceSymbol } from 'chess.js';
 
-  const chess = new Chess()
+  const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+  const SIMULATED_LAST_MOVE_FROM_SERVER = null
 
-  const handleSquareClick = (clickedSquare) => {
+  
 
-    if (moveableFields.some(field => field.includes("="))) {
-      promotion = true
+  const chess = new Chess(SIMULATED_FEN_FROM_SERVER)
+
+  const handleSquareClick = (clickedSquare:string) => {
+
+    if (hasVoted) {
       return
     }
 
+    // Promotion move
+    if (moveableFields.some(field => field.includes("="))) {
+      promotion = true
+      targetSquare = clickedSquare
+      return
+    }
+
+    // Regular move
     if (moveableFields.some(field => field.includes(clickedSquare)) ) {
-      makeMove(selectedSquare, clickedSquare)
-    } else if (moveableFields.some(field => field.includes("O-O")) && ((clickedSquare === "g1" && chess.turn() === "w") || clickedSquare === "g8" && chess.turn() === "b")) {
+      confirmMoveModal = true
+      targetSquare = clickedSquare
+      // makeMove(selectedSquare, clickedSquare)
+      return
+    } 
+    
+    // Kingside castling
+    if (moveableFields.some(field => field === "O-O") && ((clickedSquare === "g1" && chess.turn() === "w") || clickedSquare === "g8" && chess.turn() === "b")) {
       chess.move("0-0")
       chessBoard = fenToBoard(chess.fen())
       moveableFields = []
       selectedSquare = ""
-    } else {
-      moveableFields = chess.moves({square: clickedSquare})
-      selectedSquare = clickedSquare
-      console.log(moveableFields)
-    }
+      return
+    } 
+    
+    // Queenside castling
+    if (moveableFields.some(field => field === "O-O-O") && ((clickedSquare === "c1" && chess.turn() === "w") || clickedSquare === "c8" && chess.turn() === "b")) {
+      chess.move("0-0-0")
+      chessBoard = fenToBoard(chess.fen())
+      moveableFields = []
+      selectedSquare = ""
+      return
+    } 
+
+    moveableFields = chess.moves({square: clickedSquare as Square})
+    selectedSquare = clickedSquare
+    console.log(moveableFields)
+    
+
   }
 
-  const makeMove = (selectedField, targetField) => {
+  const makeMove = (selectedField:string, targetField:string) => {
     chess.move({from: selectedField, to: targetField})
     chessBoard = fenToBoard(chess.fen())
     moveableFields = []
     selectedSquare = ""
   }
 
+  const handlePromotion = (toPromoteColor:Color, toPromoteType:PieceSymbol) => {
+    chess.put({type: toPromoteType, color: toPromoteColor}, targetSquare as Square)
+    chess.remove(selectedSquare as Square)
+    chess.setTurn(toPromoteColor === "w" ? "b" : "w")
+    chessBoard = fenToBoard(chess.fen())
+    promotion = false
+    moveableFields = []
+    selectedSquare = ""
+    targetSquare = ""
+  }
+
   const fenToArray = (fen:string) => {
-    const rows = fen.split(' ')[0].split('/'); // take only board layout before spaces
+    const rows = fen.split(' ')[0].split('/');
     return rows.map(fenRowToArray);
   }
   
@@ -42,20 +84,18 @@
     const result = [];
     for (const char of fenRow) {
       if (/[1-8]/.test(char)) {
-        // It's a number - add that many empty squares (e.g., null or '')
         const emptyCount = parseInt(char, 10);
         for (let i = 0; i < emptyCount; i++) {
-          result.push(null);  // or '' if you prefer
+          result.push(null);  
         }
       } else {
-        // It's a piece, add as-is
         result.push(char);
       }
     }
     return result;
   }
 
-  const fenToBoard = (fenString) => {
+  const fenToBoard = (fenString:string) => {
 
     const fenArray = fenToArray(fenString)
     const board = []
@@ -64,7 +104,7 @@
 
       const fullRow = []
 
-      let row:number
+      let row:number = 0
       switch (i) {
           case 0:
             row = 8
@@ -100,7 +140,7 @@
           color: "",
         }
 
-        let col:string
+        let col:string = ""
         switch (j) {
         case 0:
           col = "a"
@@ -128,7 +168,7 @@
           break
       }
         
-        square.name = col+row
+        square.name = col + row
 
         if (fenArray[i][j] !== null) {
 
@@ -190,54 +230,212 @@
     return board
   }
 
+const handleChoosingColor = (selectedColor:string) => {
+
+  if (!localStorage.getItem("Chosen-Color")) {
+    localStorage.setItem("Chosen-Color", selectedColor)
+    chosenColor = selectedColor
+  }
+  showChooseColorModal = false
+}
+
+const handleConfirmMove = (confirm:boolean) => {
+
+  if(confirm){
+    // makeMove(selectedSquare, targetSquare)
+    // API Call to send your vote
+    // moveableFields = []
+    // selectedSquare = ""
+    // targetSquare = ""
+    confirmMoveModal = false
+    hasVoted = true
+  } else {
+    confirmMoveModal = false
+  }
+}
+
+const getTargetTime = () => {
+  const target = new Date();
+  target.setHours(12, 0, 0);
+
+  return target;
+}
+
+function updateCountdown() {
+  const now = new Date();
+  const target = getTargetTime();
+  const diff = target.getTime() - now.getTime();
+
+  const totalSeconds = Math.floor(diff / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  countdown = [
+    hours.toString().padStart(2, '0'),
+    minutes.toString().padStart(2, '0'),
+    seconds.toString().padStart(2, '0')
+  ].join(':');
+}
+
 let chessBoard = $state(fenToBoard(chess.fen()))
 let selectedSquare = $state<string>("")
+let targetSquare = $state<string>("")
 let moveableFields = $state<string[]>([]);
-
+let showChooseColorModal = $state<boolean>(
+  localStorage.getItem("Chosen-Color") === null ? true : false
+)
+let chosenColor = $state<string|null>(
+  localStorage.getItem("Chosen-Color")
+)
+let confirmMoveModal = $state<boolean>(false)
+let hasVoted = $state<boolean>(false)
 let promotion = $state<boolean>(false)
 
+let countdown = $state<string>("")
+
+let interval: ReturnType<typeof setInterval>
+
+onMount(() => {
+  updateCountdown();
+  interval = setInterval(updateCountdown, 1000);
+});
+
+onDestroy(() => {
+  clearInterval(interval);
+});
 </script>
 
-<main class="min-h-screen min-w-screen flex justify-center items-center bg-gray-500">
-  {#if promotion}
-    <div class="flex border">
-      <img src={`chess-figures/${chess.turn()+"Q"}.svg`} alt=""/>
-      <img src={`chess-figures/${chess.turn()+"R"}.svg`} alt=""/>
-      <img src={`chess-figures/${chess.turn()+"B"}.svg`} alt=""/>
-      <img src={`chess-figures/${chess.turn()+"N"}.svg`} alt=""/>
+<main class="min-h-screen min-w-screen flex flex-col justify-start items-center bg-gray-500">
+
+  {#if showChooseColorModal}
+    <div class="fixed min-h-screen min-w-screen flex justify-center items-center bg-black/60">
+      
+      <div class="flex flex-col gap-2 items-center w-120 h-50 p-4 rounded-lg border bg-gray-300">
+        <h1 class="text-4xl">Welcome to Vote Chess!</h1>
+        <h2 class="text-xl">Which side do you want to vote for?</h2>
+        <div class="flex">
+          <button 
+            class="w-12 h-12 transition-all hover:cursor-pointer hover:scale-110"
+            aria-label="Button to choose the white color"
+            onclick={() => handleChoosingColor("w")}
+          >
+            <img src="chess-figures/wK.svg" alt="white king icon"/>
+          </button>
+          <button 
+            class="w-12 h-12 transition-all hover:cursor-pointer hover:scale-110"
+            aria-label="Button to choose the black color"
+            onclick={() => handleChoosingColor("b")}
+          >
+            <img src="chess-figures/bK.svg" alt="black king icon"/>
+          </button>
+        </div>
+      </div>
+      
     </div>
   {/if}
-  <div class="h-128 w-128">
-    {#each chessBoard as row, rowIndex}
-      <div class="flex">
-        {#each row as square, squareIndex}
-          <div 
-            class={`
-              w-16 h-16 flex justify-center items-center border
-              ${
-                selectedSquare === square.name 
-                ? "bg-yellow-500"
-                : moveableFields.some(field => field.includes(square.name)) 
-                ? "bg-green-400" 
-                : moveableFields.some(field => field.includes("O-O")) && ((square.name === "g1" && chess.turn() === "w") || square.name === "g8" && chess.turn() === "b")
-                ? "bg-green-600"
-                : square.type === "k" && chess.inCheck() && chess.turn() === square.color
-                ? "bg-red-700"
-                : (rowIndex + squareIndex) % 2 === 0 
-                ? "bg-gray-700" 
-                : "bg-white"
-              }
-            `}
-            on:click={() => handleSquareClick(square.name)}  
+
+  {#if confirmMoveModal}
+    <div class="fixed min-h-screen min-w-screen flex justify-center items-center bg-black/60">
+      
+      <div class="flex flex-col gap-2 items-center w-120 h-50 p-4 rounded-lg border bg-gray-300">
+        <h1 class="text-4xl">Confirm move!</h1>
+        <h2 class="text-xl">You are about to vote for the following move:</h2>
+        <p>{"from " + selectedSquare + " to " + targetSquare}</p>
+        <div class="flex gap-2">
+          <button 
+            class="w-20 h-8 rounded-sm border bg-green-300 transition-all hover:cursor-pointer hover:scale-110"
+            onclick={() => handleConfirmMove(true)}
           >
-            <img 
-              src={`chess-figures/${square.color+square.type.toUpperCase()}.svg`}
-              alt={square.color + square.type}
-            />
-          </div>
-        {/each}
+            Yes!
+          </button>
+          <button 
+            class="w-20 h-8 rounded-sm border bg-red-300 transition-all hover:cursor-pointer hover:scale-110"
+            onclick={() => handleConfirmMove(false)}
+          >
+            No!
+          </button>
+        </div>
       </div>
-    {/each}
+      
+    </div>
+  {/if}
+
+
+  <div class="flex flex-col gap-2">
+  
+    <div class="flex justify-between items-center">
+      <h1 class="text-4xl">VoteChess</h1>
+      <button onclick={() => localStorage.clear()}>
+        reset color
+      </button>
+    </div>
+
+    <p class="w-full flex justify-center">
+    {#if hasVoted}
+      {`You can vote again in ${countdown}!`}
+    {:else}
+      {`You have ${countdown} left to vote!`}
+    {/if}
+    </p>
+
+    <div class="h-128 w-128">
+      {#each (chosenColor === null ? chessBoard : chosenColor === "w" ? chessBoard : [...chessBoard].reverse()) as row, rowIndex}
+        <div class="flex">
+          {#each row as square, squareIndex}
+            <div
+              aria-hidden="true" 
+              class={`
+                w-16 h-16 flex justify-center items-center border
+                ${
+                  selectedSquare === square.name 
+                  ? "bg-yellow-500"
+                  : moveableFields.some(field => field.includes(square.name)) 
+                  ? "bg-green-400" 
+                  : moveableFields.some(field => field === "O-O") && ((square.name === "g1" && chess.turn() === "w") || square.name === "g8" && chess.turn() === "b")
+                  ? "bg-green-600"
+                  : moveableFields.some(field => field === "O-O-O") && ((square.name === "c1" && chess.turn() === "w") || square.name === "c8" && chess.turn() === "b")
+                  ? "bg-green-600"
+                  : square.type === "k" && chess.inCheck() && chess.turn() === square.color
+                  ? "bg-red-700"
+                  : (rowIndex + squareIndex) % 2 === 0 
+                  ? "bg-gray-700" 
+                  : "bg-white"
+                }
+              `}
+              onclick={() => handleSquareClick(square.name)}  
+            >
+              <img 
+                src={`chess-figures/${square.color+square.type.toUpperCase()}.svg`}
+                alt={square.color + square.type}
+              />
+            </div>
+          {/each}
+        </div>
+      {/each}
+    </div>
+
+    {#if hasVoted}
+      
+      <div class="w-128 h-128 border p-4 bg-gray-600 rounded-lg">
+        
+        <h2>You have voted!</h2>
+        {"from " + selectedSquare + " to " + targetSquare}
+        <!-- {#if chooseColorModal}
+          {"Chosen color is: " + localStorage.getItem("Chosen-Color")}
+        {/if} -->
+
+        <!-- {#if promotion}
+          <div class="flex border">
+              <img src={`chess-figures/${chess.turn()+"Q"}.svg`} alt="" onclick={() => handlePromotion(chess.turn(), "q")}/>
+              <img src={`chess-figures/${chess.turn()+"R"}.svg`} alt="" onclick={() => handlePromotion(chess.turn(), "r")}/>
+              <img src={`chess-figures/${chess.turn()+"B"}.svg`} alt="" onclick={() => handlePromotion(chess.turn(), "b")}/>
+              <img src={`chess-figures/${chess.turn()+"N"}.svg`} alt="" onclick={() => handlePromotion(chess.turn(), "n")}/>
+          </div>
+        {/if} -->
+
+      </div>
+    {/if}
   </div>
 </main>
 
