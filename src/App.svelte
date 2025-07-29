@@ -3,22 +3,29 @@
   import { onDestroy, onMount } from 'svelte';
   import type { Square, Color, PieceSymbol } from 'chess.js';
 
-  const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+  // const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+  const SIMULATED_FEN_FROM_SERVER = "1p6/P7/8/8/8/8/8/7k w - - 0 1"
   const SIMULATED_LAST_MOVE_FROM_SERVER = null
 
-  
+  const chess = new Chess(SIMULATED_FEN_FROM_SERVER, { skipValidation : true })
+  const currentPlayer:"w"|"b" = chess.turn() 
 
-  const chess = new Chess(SIMULATED_FEN_FROM_SERVER)
+  const playerChosenColor = localStorage.getItem("Chosen-Color")
+
+  const YOU = playerChosenColor === "w" ? "w" : "b"
+  const OPPONENT = playerChosenColor === "w" ? "b" : "w"
+
 
   const handleSquareClick = (clickedSquare:string) => {
 
-    if (hasVoted) {
+    if (chosenColor !== currentPlayer || hasVoted) {
       return
     }
 
     // Promotion move
     if (moveableFields.some(field => field.includes("="))) {
-      promotion = true
+      // promotion = true
+      confirmPromotionModal = true
       targetSquare = clickedSquare
       return
     }
@@ -230,7 +237,7 @@
     return board
   }
 
-const handleChoosingColor = (selectedColor:string) => {
+const handleChoosingColor = (selectedColor:"w"|"b") => {
 
   if (!localStorage.getItem("Chosen-Color")) {
     localStorage.setItem("Chosen-Color", selectedColor)
@@ -242,11 +249,12 @@ const handleChoosingColor = (selectedColor:string) => {
 const handleConfirmMove = (confirm:boolean) => {
 
   if(confirm){
-    // makeMove(selectedSquare, targetSquare)
-    // API Call to send your vote
-    // moveableFields = []
-    // selectedSquare = ""
-    // targetSquare = ""
+
+    // API Call to send your vote here
+    makeMove(selectedSquare, targetSquare)
+
+    // localStorage.setItem("hasVoted","d")
+
     confirmMoveModal = false
     hasVoted = true
   } else {
@@ -254,17 +262,42 @@ const handleConfirmMove = (confirm:boolean) => {
   }
 }
 
-const getTargetTime = () => {
+const selectPromotionPiece = (selectedPiece:PieceSymbol) => {
+  pieceToPromote = selectedPiece
+}
+
+const handleConfirmPromotion = (confirm:boolean) => {
+
+  if (confirm) {
+    if (pieceToPromote === undefined) {
+      alert("select piece dumbass")
+      return
+    }
+
+    handlePromotion(currentPlayer,pieceToPromote)
+
+    confirmPromotionModal = false
+    hasVoted = true
+  } else {
+    confirmPromotionModal = false
+  }
+  
+  
+}
+
+const getTargetTime = (player:"w"|"b") => {
   const target = new Date();
-  target.setHours(12, 0, 0);
+  const hourOfColor = player === "w" ? 12 : 24
+  target.setHours(hourOfColor, 0, 0);
 
   return target;
 }
 
 function updateCountdown() {
   const now = new Date();
-  const target = getTargetTime();
+  const target = hasVoted ? getTargetTime(OPPONENT) : getTargetTime(YOU);
   const diff = target.getTime() - now.getTime();
+
 
   const totalSeconds = Math.floor(diff / 1000);
   const hours = Math.floor(totalSeconds / 3600);
@@ -285,12 +318,14 @@ let moveableFields = $state<string[]>([]);
 let showChooseColorModal = $state<boolean>(
   localStorage.getItem("Chosen-Color") === null ? true : false
 )
-let chosenColor = $state<string|null>(
-  localStorage.getItem("Chosen-Color")
+let chosenColor = $state<string>(
+  localStorage.getItem("Chosen-Color") || currentPlayer
 )
 let confirmMoveModal = $state<boolean>(false)
+let confirmPromotionModal = $state<boolean>(false)
 let hasVoted = $state<boolean>(false)
 let promotion = $state<boolean>(false)
+let pieceToPromote = $state<PieceSymbol>()
 
 let countdown = $state<string>("")
 
@@ -361,6 +396,57 @@ onDestroy(() => {
     </div>
   {/if}
 
+  {#if confirmPromotionModal}
+    <div class="fixed min-h-screen min-w-screen flex justify-center items-center bg-black/60">
+      
+      <div class="flex flex-col gap-2 items-center w-120 min-h-50 p-4 rounded-lg border bg-gray-300">
+        <h1 class="text-4xl">Confirm Promotion!</h1>
+        <h2 class="text-xl">You are about to vote on a promotion! Please select a piece to promote and confirm your vote:</h2>
+        <div class="flex">
+          <button 
+            class={`w-16 h-16 transition-all hover:cursor-pointer ${pieceToPromote === "q" ? "scale-110" : pieceToPromote === undefined ? "hover:scale-110" : "hover:scale-110 opacity-25"}`}
+            onclick={() => selectPromotionPiece("q")}
+          >
+            <img src={`chess-figures/${chess.turn()+"Q"}.svg`} alt="Queen"/>
+          </button>
+          <button 
+            class={`w-16 h-16 transition-all hover:cursor-pointer ${pieceToPromote === "r" ? "scale-110" : pieceToPromote === undefined ? "hover:scale-110" : "hover:scale-110 opacity-25"}`}
+            onclick={() => selectPromotionPiece("r")}
+          >
+            <img src={`chess-figures/${chess.turn()+"R"}.svg`} alt="Rook"/>
+          </button>  
+          <button 
+            class={`w-16 h-16 transition-all hover:cursor-pointer ${pieceToPromote === "b" ? "scale-110" : pieceToPromote === undefined ? "hover:scale-110" : "hover:scale-110 opacity-25"}`}
+            onclick={() => selectPromotionPiece("b")}
+          >
+            <img src={`chess-figures/${chess.turn()+"B"}.svg`} alt="Bishop"/>
+          </button>
+          <button 
+            class={`w-16 h-16 transition-all hover:cursor-pointer ${pieceToPromote === "n" ? "scale-110" : pieceToPromote === undefined ? "hover:scale-110" : "hover:scale-110 opacity-25"}`}
+            onclick={() => selectPromotionPiece("n")}
+          >
+            <img src={`chess-figures/${chess.turn()+"N"}.svg`} alt="Knight"/>
+          </button>
+        </div>
+        <p>{"from " + selectedSquare + " to " + targetSquare}</p>
+        <div class="flex gap-2">
+          <button 
+            class="w-20 h-8 rounded-sm border bg-green-300 transition-all hover:cursor-pointer hover:scale-110"
+            onclick={() => handleConfirmPromotion(true)}
+          >
+            Yes!
+          </button>
+          <button 
+            class="w-20 h-8 rounded-sm border bg-red-300 transition-all hover:cursor-pointer hover:scale-110"
+            onclick={() => handleConfirmPromotion(false)}
+          >
+            No!
+          </button>
+        </div>
+      </div>
+      
+    </div>
+  {/if}
 
   <div class="flex flex-col gap-2">
   
@@ -372,11 +458,17 @@ onDestroy(() => {
     </div>
 
     <p class="w-full flex justify-center">
-    {#if hasVoted}
-      {`You can vote again in ${countdown}!`}
+    {#if currentPlayer === chosenColor}
+      {#if hasVoted}
+        {`You can vote again in ${countdown}!`}
+      {:else}
+        {`You have ${countdown} left to vote!`}
+      {/if}
     {:else}
-      {`You have ${countdown} left to vote!`}
+      {`You can vote again in ${countdown}!`}
     {/if}
+
+    
     </p>
 
     <div class="h-128 w-128">
