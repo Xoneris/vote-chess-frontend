@@ -3,8 +3,8 @@
   import { onDestroy, onMount } from 'svelte';
   import type { Square, Color, PieceSymbol } from 'chess.js';
 
-  // const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-  const SIMULATED_FEN_FROM_SERVER = "1p6/P7/8/8/8/8/8/7k w - - 0 1"
+  const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+  // const SIMULATED_FEN_FROM_SERVER = "1p6/P7/8/8/8/8/8/7k w - - 0 1"
   const SIMULATED_LAST_MOVE_FROM_SERVER = null
 
   const chess = new Chess(SIMULATED_FEN_FROM_SERVER, { skipValidation : true })
@@ -60,7 +60,6 @@
     selectedSquare = clickedSquare
     console.log(moveableFields)
     
-
   }
 
   const makeMove = (selectedField:string, targetField:string) => {
@@ -270,16 +269,18 @@ const handleConfirmPromotion = (confirm:boolean) => {
 
   if (confirm) {
     if (pieceToPromote === undefined) {
-      alert("select piece dumbass")
+      selectPieceToPromoteError = "Please select a piece to promote!"
       return
     }
 
     handlePromotion(currentPlayer,pieceToPromote)
 
     confirmPromotionModal = false
+    selectPieceToPromoteError = ""
     hasVoted = true
   } else {
     confirmPromotionModal = false
+    selectPieceToPromoteError = ""
   }
   
   
@@ -326,6 +327,7 @@ let confirmPromotionModal = $state<boolean>(false)
 let hasVoted = $state<boolean>(false)
 let promotion = $state<boolean>(false)
 let pieceToPromote = $state<PieceSymbol>()
+let selectPieceToPromoteError = $state<string>("")
 
 let countdown = $state<string>("")
 
@@ -428,6 +430,7 @@ onDestroy(() => {
             <img src={`chess-figures/${chess.turn()+"N"}.svg`} alt="Knight"/>
           </button>
         </div>
+        <p class="text-red-500">{selectPieceToPromoteError}</p>
         <p>{"from " + selectedSquare + " to " + targetSquare}</p>
         <div class="flex gap-2">
           <button 
