@@ -15,8 +15,15 @@
   const YOU = playerChosenColor === "w" ? "w" : "b"
   const OPPONENT = playerChosenColor === "w" ? "b" : "w"
 
+  localStorage.clear()  
 
-  const handleSquareClick = (clickedSquare:string) => {
+  interface ChessSquare {
+    name: string,
+    type: string,
+    color: string,
+  }
+
+  const handleSquareClick = (clickedSquare:ChessSquare) => {
 
     if (chosenColor !== currentPlayer || hasVoted) {
       return
@@ -31,7 +38,7 @@
     }
 
     // Regular move
-    if (moveableFields.some(field => field.includes(clickedSquare)) ) {
+    if (moveableFields.some(field => field.includes(clickedSquare.name)) ) {
       confirmMoveModal = true
       targetSquare = clickedSquare
       // makeMove(selectedSquare, clickedSquare)
@@ -39,24 +46,24 @@
     } 
     
     // Kingside castling
-    if (moveableFields.some(field => field === "O-O") && ((clickedSquare === "g1" && chess.turn() === "w") || clickedSquare === "g8" && chess.turn() === "b")) {
+    if (moveableFields.some(field => field === "O-O") && ((clickedSquare.name === "g1" && chess.turn() === "w") || clickedSquare.name === "g8" && chess.turn() === "b")) {
       chess.move("0-0")
       chessBoard = fenToBoard(chess.fen())
       moveableFields = []
-      selectedSquare = ""
+      selectedSquare = undefined
       return
     } 
     
     // Queenside castling
-    if (moveableFields.some(field => field === "O-O-O") && ((clickedSquare === "c1" && chess.turn() === "w") || clickedSquare === "c8" && chess.turn() === "b")) {
+    if (moveableFields.some(field => field === "O-O-O") && ((clickedSquare.name === "c1" && chess.turn() === "w") || clickedSquare.name === "c8" && chess.turn() === "b")) {
       chess.move("0-0-0")
       chessBoard = fenToBoard(chess.fen())
       moveableFields = []
-      selectedSquare = ""
+      selectedSquare = undefined
       return
     } 
 
-    moveableFields = chess.moves({square: clickedSquare as Square})
+    moveableFields = chess.moves({square: clickedSquare.name as Square})
     selectedSquare = clickedSquare
     console.log(moveableFields)
     
@@ -66,18 +73,18 @@
     chess.move({from: selectedField, to: targetField})
     chessBoard = fenToBoard(chess.fen())
     moveableFields = []
-    selectedSquare = ""
+    selectedSquare = undefined
   }
 
   const handlePromotion = (toPromoteColor:Color, toPromoteType:PieceSymbol) => {
-    chess.put({type: toPromoteType, color: toPromoteColor}, targetSquare as Square)
-    chess.remove(selectedSquare as Square)
+    chess.put({type: toPromoteType, color: toPromoteColor}, targetSquare?.name as Square)
+    chess.remove(selectedSquare?.name as Square)
     chess.setTurn(toPromoteColor === "w" ? "b" : "w")
     chessBoard = fenToBoard(chess.fen())
     promotion = false
     moveableFields = []
-    selectedSquare = ""
-    targetSquare = ""
+    selectedSquare = undefined
+    targetSquare = undefined
   }
 
   const fenToArray = (fen:string) => {
@@ -247,12 +254,14 @@ const handleChoosingColor = (selectedColor:"w"|"b") => {
 
 const handleConfirmMove = (confirm:boolean) => {
 
-  if(confirm){
+  if(confirm && selectedSquare !== undefined && targetSquare !== undefined){
 
     // API Call to send your vote here
-    makeMove(selectedSquare, targetSquare)
+    makeMove(selectedSquare.name, targetSquare.name)
 
-    // localStorage.setItem("hasVoted","d")
+    console.log(selectedSquare, targetSquare)
+
+    localStorage.setItem("votedMove",selectedSquare+"/"+targetSquare)
 
     confirmMoveModal = false
     hasVoted = true
@@ -313,8 +322,8 @@ function updateCountdown() {
 }
 
 let chessBoard = $state(fenToBoard(chess.fen()))
-let selectedSquare = $state<string>("")
-let targetSquare = $state<string>("")
+let selectedSquare = $state<ChessSquare>()
+let targetSquare = $state<ChessSquare>()
 let moveableFields = $state<string[]>([]);
 let showChooseColorModal = $state<boolean>(
   localStorage.getItem("Chosen-Color") === null ? true : false
@@ -332,6 +341,12 @@ let selectPieceToPromoteError = $state<string>("")
 let countdown = $state<string>("")
 
 let interval: ReturnType<typeof setInterval>
+
+if (localStorage.getItem("votedMove")) {
+  console.log(localStorage.getItem("votedMove"))
+  const votedMove = localStorage.getItem("votedMove")?.split("/")
+  // makeMove(votedMove[0],votedMove[1])
+}
 
 onMount(() => {
   updateCountdown();
@@ -378,7 +393,7 @@ onDestroy(() => {
       <div class="flex flex-col gap-2 items-center w-120 h-50 p-4 rounded-lg border bg-gray-300">
         <h1 class="text-4xl">Confirm move!</h1>
         <h2 class="text-xl">You are about to vote for the following move:</h2>
-        <p>{"from " + selectedSquare + " to " + targetSquare}</p>
+        <p>{"from " + selectedSquare?.name + " to " + targetSquare?.name}</p>
         <div class="flex gap-2">
           <button 
             class="w-20 h-8 rounded-sm border bg-green-300 transition-all hover:cursor-pointer hover:scale-110"
@@ -483,7 +498,7 @@ onDestroy(() => {
               class={`
                 w-16 h-16 flex justify-center items-center border
                 ${
-                  selectedSquare === square.name 
+                  selectedSquare?.name === square.name 
                   ? "bg-yellow-500"
                   : moveableFields.some(field => field.includes(square.name)) 
                   ? "bg-green-400" 
@@ -498,7 +513,7 @@ onDestroy(() => {
                   : "bg-white"
                 }
               `}
-              onclick={() => handleSquareClick(square.name)}  
+              onclick={() => handleSquareClick(square)}  
             >
               <img 
                 src={`chess-figures/${square.color+square.type.toUpperCase()}.svg`}
