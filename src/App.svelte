@@ -3,24 +3,10 @@
   import { onDestroy, onMount } from 'svelte';
   import type { Square, Color, PieceSymbol } from 'chess.js';
 
-  const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-  // const SIMULATED_FEN_FROM_SERVER = "1p6/P7/8/8/8/8/8/7k w - - 0 1"
-  const SIMULATED_LAST_MOVE_FROM_SERVER = null
-
-  const chess = new Chess(SIMULATED_FEN_FROM_SERVER, { skipValidation : true })
-  const currentPlayer:"w"|"b" = chess.turn() 
-
-  const playerChosenColor = localStorage.getItem("Chosen-Color")
-
-  const YOU = playerChosenColor === "w" ? "w" : "b"
-  const OPPONENT = playerChosenColor === "w" ? "b" : "w"
-
-  localStorage.clear()  
-
   interface ChessSquare {
-    name: string,
-    type: string,
-    color: string,
+    name: Square,
+    type: PieceSymbol|"",
+    color: Color,
   }
 
   const handleSquareClick = (clickedSquare:ChessSquare) => {
@@ -38,7 +24,7 @@
     }
 
     // Regular move
-    if (moveableFields.some(field => field.includes(clickedSquare.name)) ) {
+    if (moveableFields.some(field => field.includes(clickedSquare.name))) {
       confirmMoveModal = true
       targetSquare = clickedSquare
       // makeMove(selectedSquare, clickedSquare)
@@ -63,14 +49,36 @@
       return
     } 
 
-    moveableFields = chess.moves({square: clickedSquare.name as Square})
+    moveableFields = chess.moves({square: clickedSquare.name})
     selectedSquare = clickedSquare
     console.log(moveableFields)
     
   }
 
-  const makeMove = (selectedField:string, targetField:string) => {
-    chess.move({from: selectedField, to: targetField})
+  const makeMove = (selectedField:ChessSquare, targetField:ChessSquare) => {
+
+    let move:string = ""
+
+    // If Targetfield has no enemy piece
+    if(targetField.type === ""){
+
+      if(selectedField.type === "p"){
+        move = targetField.name
+      } else {
+        move = selectedField.type.toUpperCase() + targetField.name
+      }
+    // If TargetField has an enemy piece
+    } else {
+      if(selectedField.type === "p"){
+        move = selectedField.name[0] + "x" + targetField.name
+      } else {
+        move = selectedField.type.toUpperCase() + "x" + targetField.name
+      }
+    }
+    console.log(move)
+
+    // chess.move({from: selectedField, to: targetField})
+    chess.move(move)
     chessBoard = fenToBoard(chess.fen())
     moveableFields = []
     selectedSquare = undefined
@@ -115,7 +123,7 @@
 
     for (let i=0 ; i<fenArray.length ; i++) {
 
-      const fullRow = []
+      const fullRow:ChessSquare[] = []
 
       let row:number = 0
       switch (i) {
@@ -236,9 +244,9 @@
               break
           }
         }
-        fullRow.push(square)
+        fullRow.push(square as ChessSquare)
       }
-      board.push(fullRow)
+      board.push(fullRow as ChessSquare[])
     }
     return board
   }
@@ -256,15 +264,15 @@ const handleConfirmMove = (confirm:boolean) => {
 
   if(confirm && selectedSquare !== undefined && targetSquare !== undefined){
 
+    const votedMove = [selectedSquare,targetSquare]
+    localStorage.setItem("votedMove",JSON.stringify(votedMove))
+
     // API Call to send your vote here
-    makeMove(selectedSquare.name, targetSquare.name)
-
-    console.log(selectedSquare, targetSquare)
-
-    localStorage.setItem("votedMove",selectedSquare+"/"+targetSquare)
+    makeMove(selectedSquare, targetSquare)
 
     confirmMoveModal = false
     hasVoted = true
+    localStorage.setItem("hasVoted","yes")
   } else {
     confirmMoveModal = false
   }
@@ -287,6 +295,7 @@ const handleConfirmPromotion = (confirm:boolean) => {
     confirmPromotionModal = false
     selectPieceToPromoteError = ""
     hasVoted = true
+    localStorage.setItem("hasVoted","yes")
   } else {
     confirmPromotionModal = false
     selectPieceToPromoteError = ""
@@ -303,7 +312,7 @@ const getTargetTime = (player:"w"|"b") => {
   return target;
 }
 
-function updateCountdown() {
+const updateCountdown = () => {
   const now = new Date();
   const target = hasVoted ? getTargetTime(OPPONENT) : getTargetTime(YOU);
   const diff = target.getTime() - now.getTime();
@@ -320,6 +329,22 @@ function updateCountdown() {
     seconds.toString().padStart(2, '0')
   ].join(':');
 }
+
+
+
+const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+// const SIMULATED_FEN_FROM_SERVER = "1p6/P7/8/8/8/8/8/7k w - - 0 1"
+const SIMULATED_LAST_MOVE_FROM_SERVER = null
+
+const chess = new Chess(SIMULATED_FEN_FROM_SERVER, { skipValidation : true })
+const currentPlayer:"w"|"b" = chess.turn() 
+
+const playerChosenColor = localStorage.getItem("Chosen-Color")
+
+const YOU = playerChosenColor === "w" ? "w" : "b"
+const OPPONENT = playerChosenColor === "w" ? "b" : "w"
+
+// localStorage.clear()
 
 let chessBoard = $state(fenToBoard(chess.fen()))
 let selectedSquare = $state<ChessSquare>()
@@ -339,16 +364,22 @@ let pieceToPromote = $state<PieceSymbol>()
 let selectPieceToPromoteError = $state<string>("")
 
 let countdown = $state<string>("")
-
 let interval: ReturnType<typeof setInterval>
 
-if (localStorage.getItem("votedMove")) {
-  console.log(localStorage.getItem("votedMove"))
-  const votedMove = localStorage.getItem("votedMove")?.split("/")
-  // makeMove(votedMove[0],votedMove[1])
-}
-
 onMount(() => {
+
+  if(localStorage.getItem("votedMove") !== null){
+    const voteFromLocalStorage = localStorage.getItem("votedMove") as string
+    const votedMove = JSON.parse(voteFromLocalStorage)
+    chess.put({type: votedMove[0].type, color: votedMove[0].color}, votedMove[1].name)
+    chess.remove(votedMove[0].name)
+    chessBoard = fenToBoard(chess.fen())
+  }
+
+  if(localStorage.getItem("hasVoted") !== null){
+    hasVoted = localStorage.getItem("hasVoted") === "yes" ? true : false
+  }
+
   updateCountdown();
   interval = setInterval(updateCountdown, 1000);
 });
@@ -471,7 +502,7 @@ onDestroy(() => {
     <div class="flex justify-between items-center">
       <h1 class="text-4xl">VoteChess</h1>
       <button onclick={() => localStorage.clear()}>
-        reset color
+        reset localStorage
       </button>
     </div>
 
