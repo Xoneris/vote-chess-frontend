@@ -317,6 +317,10 @@ const updateCountdown = () => {
   const target = hasVoted ? getTargetTime(OPPONENT) : getTargetTime(YOU);
   const diff = target.getTime() - now.getTime();
 
+  if (diff >= 0) {
+    localStorage.setItem("hasVoted","no")
+    localStorage.setItem("votedMove", "")
+  }
 
   const totalSeconds = Math.floor(diff / 1000);
   const hours = Math.floor(totalSeconds / 3600);
@@ -330,7 +334,21 @@ const updateCountdown = () => {
   ].join(':');
 }
 
+const updateTimer = () => {
+  const now = Date.now()
+  remaining = TIMER - (now % TIMER)
 
+  const totalSeconds = Math.floor(remaining / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  countdown = [
+    hours.toString().padStart(2, '0'),
+    minutes.toString().padStart(2, '0'),
+    seconds.toString().padStart(2, '0')
+  ].join(':');
+}
 
 const SIMULATED_FEN_FROM_SERVER = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 // const SIMULATED_FEN_FROM_SERVER = "1p6/P7/8/8/8/8/8/7k w - - 0 1"
@@ -339,10 +357,13 @@ const SIMULATED_LAST_MOVE_FROM_SERVER = null
 const chess = new Chess(SIMULATED_FEN_FROM_SERVER, { skipValidation : true })
 const currentPlayer:"w"|"b" = chess.turn() 
 
-const playerChosenColor = localStorage.getItem("Chosen-Color")
+const playerChosenColor = localStorage.getItem("Chosen-Color") || chess.turn()
 
 const YOU = playerChosenColor === "w" ? "w" : "b"
 const OPPONENT = playerChosenColor === "w" ? "b" : "w"
+
+const TIMER = 1000 * 60 * 60 // 1 Hour 
+let remaining = 0
 
 // localStorage.clear()
 
@@ -380,8 +401,10 @@ onMount(() => {
     hasVoted = localStorage.getItem("hasVoted") === "yes" ? true : false
   }
 
-  updateCountdown();
-  interval = setInterval(updateCountdown, 1000);
+  // updateCountdown();
+  // interval = setInterval(updateCountdown, 1000);
+  updateTimer();
+  interval = setInterval(updateTimer, 1000)
 });
 
 onDestroy(() => {
